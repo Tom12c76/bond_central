@@ -5,23 +5,33 @@ from pathlib import Path
 import time
 
 def load_feather():
-    # Define the directory containing feather files
-    feather_dir = Path(r'C:\Users\A9T230\OneDrive - Deutsche Bank AG\_STAR\Feather')
+    # Define default and home feather directories
+    default_dir = Path(r'C:\Users\A9T230\OneDrive - Deutsche Bank AG\_STAR\Feather')
+    home_dir = Path(r'C:\Users\thoma\OneDrive\Lebenslauf\_DB\_base_case\feather')
 
-    # Get a list of all feather files in the directory
-    feather_files = [file.name for file in feather_dir.iterdir() if file.suffix == '.feather']
+    # Try default location first
+    feather_files = [file.name for file in default_dir.iterdir() if file.suffix == '.feather'] if default_dir.exists() else []
+    feather_dir = default_dir
+
+    # If no files found, try home location
+    if not feather_files:
+        feather_files = [file.name for file in home_dir.iterdir() if file.suffix == '.feather'] if home_dir.exists() else []
+        feather_dir = home_dir
 
     st.subheader("Select a feather database file")
-    file_selection = st.selectbox("Select a Feather file to load:", feather_files, index=len(feather_files) - 1)
+    if feather_files:
+        file_selection = st.selectbox("Select a Feather file to load:", feather_files, index=len(feather_files) - 1)
 
-    if st.button("Load File"):
-        file_path = feather_dir / file_selection
-        df_full = pd.read_feather(file_path)
-        st.session_state.df_full = df_full
-        st.session_state.file_loaded = True
-        st.success(f"File {file_selection} loaded successfully!")
-        time.sleep(1)  # Wait for one second before hiding the widget
-        st.rerun()  # Use rerun to refresh the app\
+        if st.button("Load File"):
+            file_path = feather_dir / file_selection
+            df_full = pd.read_feather(file_path)
+            st.session_state.df_full = df_full
+            st.session_state.file_loaded = True
+            st.success(f"File {file_selection} loaded successfully!")
+            time.sleep(1)  # Wait for one second before hiding the widget
+            st.rerun()  # Use rerun to refresh the app
+    else:
+        st.warning("No feather files found in either location.")
 
 def create_waterfall_chart(df):
     grouped_df = df.groupby('L1')['Abs Ctv EUR'].sum().sort_values(ascending=False).reset_index()

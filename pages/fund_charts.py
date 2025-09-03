@@ -1039,9 +1039,14 @@ import seaborn as sns
 correlation_matrix = logret.rename(columns=fund_names).drop('Portfolio', axis=1).corr()
 
 # Create a clustermap from the correlation matrix
+
+# Clean correlation matrix: replace inf with nan, then fill nan with 0
+import numpy as np
+correlation_matrix_clean = correlation_matrix.replace([np.inf, -np.inf], np.nan).fillna(0)
+
 sns.set(font_scale=1)
 clustermap_fig = sns.clustermap(
-    correlation_matrix*100,
+    correlation_matrix_clean*100,
     method='average',
     metric='euclidean',
     cmap='vlag',
@@ -1055,12 +1060,29 @@ clustermap_fig = sns.clustermap(
 clustermap_fig.savefig("clustermap.png")
 
 # Display the saved image in Streamlit
-st.image("clustermap.png", caption="Clustered Correlation Matrix of Funds", use_column_width=True)
+st.image("clustermap.png", caption="Clustered Correlation Matrix of Funds", use_container_width=True)
 
 
 
 
-fig_dendrogram = get_fig_dendrogram(logret, fund_names)
+
+
+# Clean logret before dendrogram: replace inf with nan, then fill nan with 0
+import numpy as np
+logret_clean = logret.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+# Ensure only numeric columns
+logret_clean = logret_clean.select_dtypes(include=[np.number])
+
+# Check for finite values
+if not np.isfinite(logret_clean.values).all():
+    raise ValueError("Non-finite values remain in logret_clean after cleaning!")
+
+# Check shape (should be 2D)
+if logret_clean.ndim != 2:
+    raise ValueError(f"logret_clean must be 2D, got shape {logret_clean.shape}")
+
+fig_dendrogram = get_fig_dendrogram(logret_clean, fund_names)
 st.plotly_chart(fig_dendrogram)
 
 fig_rebate = get_fig_rebate()
