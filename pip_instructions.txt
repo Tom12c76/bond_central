@@ -1,0 +1,61 @@
+pip install --proxy http://userproxy.intranet.db.com:8080 --upgrade pip
+pip install --proxy http://userproxy.intranet.db.com:8080 pandas
+pip install --proxy http://userproxy.intranet.db.com:8080 eikon
+pip install --proxy http://userproxy.intranet.db.com:8080 streamlit
+
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 plotly
+pip install --user --proxy http://userproxy.intranet.db.com:8080 kaleido
+pip install --user --proxy http://userproxy.intranet.db.com:8080 xlwings
+
+
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 yfinance
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 xbbg
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 yahooquery
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 "camelot-py[base]" (requires ghostwriter)
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 tabula-py (requires java)
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 pypdf2
+
+** install PANEL not Bokeh **
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 panel
+
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 streamlit-aggrid
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 mitoinstaller
+
+#selenium.exe is blocked !!!
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 selenium
+
+pip install --user --no-cache-dir --proxy http://userproxy.intranet.db.com:8080 altair vega_datasets
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 fpdf
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 jupyterlab
+pip install --user --proxy http://userproxy.intranet.db.com:8080 ipywidgets
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 jupyter -U
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 ipyaggrid
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 langchain
+ERROR: jupyter-events 0.6.3 requires rfc3986-validator>=0.1.1, which is not installed.
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 openai
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 pyarrow
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 pycaret
+
+pip install --proxy http://userproxy.intranet.db.com:8080 --index-url=https://bcms.bloomberg.com/pip/simple blpapi
+
+pip install --user --proxy http://userproxy.intranet.db.com:8080 pyxirr
+
+environment variables for your account
+
+python -m jupyterlab
+
+
+ERROR: Could not install packages due to an EnvironmentError: [Errno 28] No space left on device: 'C:\\Users\\a9t230\\AppData\\Roaming\\Python\\Python38\\site-packages\\nest_asyncio.py'
+
+conda activate C:\Users\A9T230\AppData\Local\A9T230\pyLocal
+
+C:\Users\A9T230\AppData\Roaming\Python\Python310\Scripts
