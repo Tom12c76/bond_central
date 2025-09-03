@@ -1,0 +1,40 @@
+# Python
+*.pyc
+__pycache__/
+.env/
+.venv/
+*.pyo
+*.pyd
+*.swp
+*.bak
+*.tmp
+*.log
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Mac/Linux/Windows system files
+.DS_Store
+Thumbs.db
+
+# Excel/CSV
+*.xlsx
+*.csv
+
+# PDFs
+*.pdf
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# HTML
+*.html
+
+# Temporary folders
+/temp_data/
