@@ -38,6 +38,50 @@ if uploaded_files:
                 df.columns = df.iloc[0]
                 df = df.iloc[1:].reset_index(drop=True)
                 df['source_file'] = uploaded_file.name
+
+                # Map columns to unified structure
+                # Individual format
+                individual_cols = [
+                    'Cognome', 'Nome', 'NDG', 'Classe', 'Tipo', 'Sportello',
+                    'Data di Nascita', 'Luogo di Nascita', 'Residenza'
+                ]
+                # Company format
+                company_cols = [
+                    'Ragione Sociale', 'NDG', 'Classe', 'Tipo', 'Sportello',
+                    'Data Costituz./Nascita', 'Sede Legale/Residenza'
+                ]
+
+                # Check which format
+                if set(individual_cols).issubset(df.columns):
+                    # Already in individual format
+                    df['Tipo_Cliente'] = 'Persona Fisica'
+                elif set(company_cols).issubset(df.columns):
+                    # Map company columns to unified structure
+                    df = df.rename(columns={
+                        'Ragione Sociale': 'Cognome',
+                        'Data Costituz./Nascita': 'Data di Nascita',
+                        'Sede Legale/Residenza': 'Residenza'
+                    })
+                    # Fill missing columns for company
+                    for col in ['Nome', 'Luogo di Nascita']:
+                        if col not in df.columns:
+                            df[col] = ''
+                    df['Tipo_Cliente'] = 'Persona Giuridica'
+                else:
+                    st.warning(f"Table format not recognized in {uploaded_file.name}. Columns: {list(df.columns)}")
+
+                # Ensure all required columns exist
+                required_cols = [
+                    'Cognome', 'Nome', 'NDG', 'Classe', 'Tipo', 'Sportello',
+                    'Data di Nascita', 'Luogo di Nascita', 'Residenza',
+                    'Tipo_Cliente', 'source_file', 'page_number'
+                ]
+                for col in required_cols:
+                    if col not in df.columns:
+                        df[col] = ''
+                # Reorder columns
+                df = df[required_cols]
+                all_tables.append(df)
                 df['page_number'] = tables[t].page
                 all_tables.append(df)
         st.info(f"Finished processing {uploaded_file.name}")
