@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 
-
-st.set_page_config(layout='wide')
+st.set_page_config(page_title="Pacman", page_icon="🕹️", layout='wide')
 
 ek.set_app_key('cf2eaf5e3b3c42adba08b3c5c2002b6ced1e77d7')
 cols = px.colors.qualitative.G10 * 10

@@ -12,8 +12,7 @@ import plotly.figure_factory as ff
 import subprocess
 from PyPDF2 import PdfMerger
 
-
-st.set_page_config(layout='wide')
+st.set_page_config(page_title="Ptf Fund Charts", page_icon="📈", layout='wide')
 
 ek.set_app_key('cf2eaf5e3b3c42adba08b3c5c2002b6ced1e77d7')
 cols = px.colors.qualitative.G10 * 10

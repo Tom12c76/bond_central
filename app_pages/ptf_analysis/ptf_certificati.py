@@ -10,6 +10,8 @@ import subprocess
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+st.set_page_config(page_title="Ptf Certificati", page_icon="🏦", layout='wide')
+
 # import plotly.express as px
 # cols = px.colors.qualitative.G10*10
 

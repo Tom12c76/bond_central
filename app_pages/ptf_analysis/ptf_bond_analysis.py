@@ -7,6 +7,8 @@ import io
 import xlwings as xw
 import datetime
 
+st.set_page_config(page_title="Ptf Bond Analysis", page_icon="📊")
+
 # Eikon API key and set page configuration
 ek.set_app_key('cf2eaf5e3b3c42adba08b3c5c2002b6ced1e77d7')
 st.set_page_config(layout='wide')
