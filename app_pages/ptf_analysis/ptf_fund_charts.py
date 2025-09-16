@@ -863,7 +863,6 @@ if df is None or df.empty:
 
 # else:
 col1, col2 = st.columns([2,3])
-st.write(df)
 
 unique_ac = ['All'] + df['AC'].unique().tolist()
 selected_ac = col1.multiselect('Select Asset Class(es)', unique_ac, default='All', key='selected_ac')
@@ -872,6 +871,24 @@ df = df if 'All' in selected_ac or not selected_ac else df.loc[df['AC'].isin(sel
 unique_mod = ['All'] + df['Module'].unique().tolist()
 selected_mod = col2.multiselect('Select Module(s)', unique_mod, default='All', key='selected_mod')
 df = df if 'All' in selected_mod or not selected_mod else df.loc[df['Module'].isin(selected_mod)]
+
+# Display the filtered DataFrame
+st.dataframe(
+    df,
+    column_config={
+        "Controvalore EUR": st.column_config.NumberColumn(
+            format="%.0f",
+        ),
+        "Rebate": st.column_config.NumberColumn(
+            format="%.4f",
+        ),
+        "Quant": st.column_config.NumberColumn(
+            format="%.0f"
+        ),
+    },
+    hide_index=True,
+    use_container_width=True
+)
 
 # Generate slider steps including the final length
 steps = list(range(0, len(df), 10))
