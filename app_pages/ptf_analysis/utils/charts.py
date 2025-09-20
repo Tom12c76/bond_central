@@ -1,7 +1,316 @@
+def get_fig_returns(df_funds):
+    fig_returns = px.bar(
+        df_funds[['Descrizione', '12M Rtn', 'color']],
+        y='Descrizione',
+        x='12M Rtn',
+        orientation='h',
+        text_auto='.1%',
+        title='Returns 12M',
+        color='color',
+        color_discrete_map={'Portfolio': '#00a3e0', 'Other': '#0c2340'},
+        category_orders={'Descrizione': df_funds['Descrizione'].tolist()[::-1]}
+    )
+    fig_returns.add_vline(
+        x=df_funds['12M Rtn'].drop('Ptf').mean(), line_width=1.5, line_color='#ffc845', line_dash='dash',
+        annotation=dict(text='Average', showarrow=True)
+    )
+    fig_returns.update_xaxes(tickformat='.0%', title='', showgrid=False)
+    fig_returns.update_yaxes(title='', showgrid=True, mirror=False)
+    fig_returns.update_layout(
+        height=210 * 5, width=297 * 5, template='presentation',
+        showlegend=False, font_family="Deutsche Bank Text",
+        margin=dict(l=300, r=50, t=150, b=100)
+    )
+    return fig_returns
+
+def get_fig_trellis(cumret, df_funds):
+    cumret_long = cumret.rename(columns=df_funds['Descrizione'].to_dict())
+    cumret_long = cumret_long.reset_index()
+    cumret_long = cumret_long.melt(id_vars='Date', var_name='Fund', value_name='cumret')
+    fig_trellis = px.line(
+        cumret_long,
+        x='Date',
+        y='cumret',
+        facet_col='Fund',
+        facet_col_wrap=5,
+        color_discrete_sequence=['#0c2340'],
+        title='Cumulative Returns 12M'
+    )
+    funds = cumret_long['Fund'].unique()
+    num_funds = len(funds)
+    num_rows = (num_funds + 4) // 5
+    for i, fund in enumerate(funds):
+        fig_trellis.add_trace(
+            go.Scatter(
+                x=cumret_long.set_index('Fund').loc['Portfolio', 'Date'],
+                y=cumret_long.set_index('Fund').loc['Portfolio', 'cumret'],
+                mode='lines',
+                name='Portfolio',
+                line=dict(color='#00a3e0'),
+                showlegend=False
+            ),
+            row=num_rows - (i // 5),
+            col=(i % 5) + 1
+        )
+    for annotation in fig_trellis.layout.annotations:
+        annotation.text = annotation.text.split('=')[1]
+    fig_trellis.update_yaxes(tickformat='.0%', title='', showgrid=False, zeroline=True, showline=False,
+                             minor=dict(showgrid=False))
+    fig_trellis.update_xaxes(showgrid=False, showticklabels=False, title="", showline=False)
+    fig_trellis.update_layout(
+        height=210 * 5, width=297 * 5, template='presentation',
+        showlegend=False, font_family="Deutsche Bank Text",
+        margin=dict(l=80, r=30, t=150, b=50), plot_bgcolor=None)
+    return fig_trellis
+
+def get_fig_scatter(df_funds):
+    df_filtered = df_funds[['Descrizione', '12M Rtn', 'Peso', '12M Contrib']].dropna()
+    fig_scatter = go.Figure()
+    for idx, row in df_filtered.drop('Ptf').iterrows():
+        fig_scatter.add_trace(go.Scatter(
+            x=[row['Peso'], row['Peso']],
+            y=[0, row['12M Rtn']],
+            mode='lines',
+            line=dict(color='#0c2340', width=3),
+            opacity=0.6,
+            showlegend=False
+        ))
+    fig_scatter.add_trace(go.Scatter(
+        x=df_filtered['Peso'].drop('Ptf'),
+        y=df_filtered['12M Rtn'].drop('Ptf'),
+        mode='markers+text',
+        marker=dict(size=20, color='#0c2340'),
+        text=df_filtered['Descrizione'].drop('Ptf'),
+        textposition='middle right',
+        showlegend=False
+    ))
+    fig_scatter.add_vline(x=df_funds['Peso'].drop('Ptf').mean(),
+                          line=dict(color='#ffc845', dash='dash', width=2),
+                          annotation=dict(text='Avg Weight'))
+    fig_scatter.add_hline(y=df_funds['12M Rtn'].drop('Ptf').mean(),
+                          line=dict(color='#ffc845', dash='dash', width=2),
+                          annotation=dict(text='Avg Rtn'))
+    fig_scatter.add_hline(y=df_funds.loc['Ptf', '12M Rtn'],
+                          line=dict(color='#00a3e0', dash='dash', width=2),
+                          annotation=dict(text='Portfolio'))
+    fig_scatter.update_traces(textposition='middle right')
+    fig_scatter.update_xaxes(tickformat='.0%', title='Portfolio Weight', showline=False, mirror=False, rangemode='tozero')
+    fig_scatter.update_yaxes(tickformat='.0%', title='Return 12M', showline=False, mirror=False)
+    fig_scatter.update_layout(
+                      title='Contribution Scatterplot',
+                      height=210 * 5, width=297 * 5, template='presentation',
+                      showlegend=False, font_family="Deutsche Bank Text",
+                      margin=dict(l=100, r=80, t=150, b=80), plot_bgcolor=None)
+    return fig_scatter
+
+def get_fig_contrib(df_funds):
+    temp = df_funds[['Descrizione', '12M Contrib']].sort_values('12M Contrib', ascending=False)
+    x_values = temp['12M Contrib'].drop('Ptf').tolist() + [0]
+    y_labels = temp['Descrizione'].drop('Ptf').tolist() + ['Portafoglio']
+    new_index = temp.drop('Ptf').index.tolist() + ['Ptf']
+    reordered_series = temp['12M Contrib'].loc[new_index]
+    text_labels = [f'{x:.2%}' for x in reordered_series]
+    fig_contrib = go.Figure(go.Waterfall(
+        name="Perf contrib",
+        orientation="h",
+        measure=["relative"] * (len(df_funds) - 1) + ['total'],
+        y=y_labels,
+        textposition="outside",
+        text=text_labels,
+        x=x_values,
+        increasing= dict(marker=dict(color='#0c2340')),
+        decreasing = dict(marker=dict(color='#8794a1')),
+        totals=dict(marker=dict(color='#00a3e0')),
+        connector=dict(visible=False)
+    ))
+    fig_contrib.add_vline(
+        x=temp.loc['Ptf','12M Contrib'], line_width=1.5, line_color='#00a3e0', line_dash='dash',
+    )
+    fig_contrib.update_xaxes(tickformat='.0%', title='12M Contribution', showgrid=False)
+    fig_contrib.update_yaxes(title='', showgrid=True, autorange='reversed', side='right')
+    fig_contrib.update_layout(
+        title='Portfolio Contribution Waterfall',
+        height=210 * 5, width=297 * 5, template='presentation',
+        showlegend=False, font_family="Deutsche Bank Text",
+        margin=dict(l=50, r=300, t=150, b=100), plot_bgcolor=None
+    )
+    return fig_contrib
+
+def get_fig_dendrogram(logret, fund_names, user_defined_colors=None):
+    import plotly.figure_factory as ff
+    import streamlit as st
+    if user_defined_colors is None:
+        user_defined_colors = ['#0c2340', '#4ac9e3', '#8794a1', '#ffc845', '#07792b', '#e4002b', '#00a3e0', '#671e75',
+                               '#cedc00', '#e57200', '#57646c', '#99dcf3', '#a4bcc2', '#c9b7d1', '#f29e97', '#a7d6cd',
+                               '#d7dee2']
+    corr_matrix = logret.rename(columns=fund_names).drop('Portfolio', axis=1).corr()
+    distance_matrix = 1 - corr_matrix
+    dendrogram = ff.create_dendrogram(
+        distance_matrix,
+        orientation='right',
+        labels=corr_matrix.columns.tolist())
+    color_map = {}
+    unique_colors = list(set(scatter['marker']['color'] for scatter in dendrogram['data']))
+    for i, original_color in enumerate(unique_colors):
+        color_map[original_color] = user_defined_colors[i % len(user_defined_colors)]
+    for scatter in dendrogram['data']:
+        scatter['marker']['color'] = color_map[scatter['marker']['color']]
+    triplets = []
+    for scatter in dendrogram['data']:
+        color = scatter['marker']['color']
+        x_coords = scatter['x']
+        y_coords = scatter['y']
+        for x, y in zip(x_coords, y_coords):
+            triplets.append((x, y, color))
+    color_codes_df = pd.DataFrame(triplets, columns=['x', 'y', 'color'])
+    color_codes = color_codes_df.query('x == 0')[['y', 'color']].drop_duplicates().sort_values('y')['color']
+    cumulative_returns = np.exp(logret.sum()) - 1
+    color_codes_list = color_codes.values.tolist()
+    bar_chart = go.Bar(
+        x=cumulative_returns.values,
+        y=np.array(dendrogram['layout']['yaxis']['tickvals']),
+        marker=dict(color=color_codes_list),
+        orientation='h'
+    )
+    fig_dendrogram = make_subplots(
+        rows=1, cols=2,
+        shared_yaxes=True,
+        column_widths=[0.3, 0.7],
+        horizontal_spacing=0.02,
+        subplot_titles=("Dendrogram", "Cumulative Returns")
+    )
+    for trace in dendrogram['data']:
+        fig_dendrogram.add_trace(trace, row=1, col=1)
+    fig_dendrogram.add_trace(bar_chart, row=1, col=2)
+    fig_dendrogram.update_layout(
+        title='Mutual Funds Analysis: Dendrogram and Cumulative Returns',
+        showlegend=False,
+        height=800
+    )
+    fig_dendrogram.update_xaxes(title_text='Distance (1 - Correlation)', row=1, col=1)
+    fig_dendrogram.update_xaxes(title_text='Cumulative Return', row=1, col=2)
+    fig_dendrogram.update_yaxes(showticklabels=True, row=1, col=2, ticktext=distance_matrix.columns,
+                                tickvals=np.array(dendrogram['layout']['yaxis']['tickvals']), side='right',
+                                showgrid=True)
+    fig_dendrogram.update_yaxes(showticklabels=False, row=1, col=1)
+    st.write("Distance Matrix:\n", distance_matrix)
+    st.write("Dendrogram Tickvals:\n", dendrogram['layout']['yaxis']['tickvals'])
+    cumulative_returns = np.exp(logret.sum()) - 1
+    st.write("Cumulative Returns:\n", cumulative_returns)
+    return fig_dendrogram
+
+def get_fig_rebate(df_funds):
+    import plotly.graph_objects as go
+    df_filtered = df_funds.drop('Ptf').sort_values('Rebate 12M EUR', ascending=False)
+    fig_rebate = go.Figure()
+    for idx, row in df_filtered.iterrows():
+        fig_rebate.add_trace(go.Scatter(
+            x=[row['Peso'], row['Peso']],
+            y=[0, row['Rebate 12M EUR']],
+            mode='lines',
+            line=dict(color='#0c2340', width=3),
+            opacity=0.6,
+            showlegend=False
+        ))
+    fig_rebate.add_trace(go.Scatter(
+        x=df_filtered['Peso'],
+        y=df_filtered['Rebate 12M EUR'],
+        mode='markers+text',
+        marker=dict(size=20, color='#0c2340'),
+        text=df_filtered['Descrizione'],
+        textposition='middle right',
+        showlegend=False
+    ))
+    max_peso = df_funds['Peso'].drop('Ptf').max()
+    total_rebate = df_funds['Rebate 12M EUR'].drop('Ptf').sum()
+    fig_rebate.add_trace(go.Scatter(
+        x=[0, max_peso],
+        y=[0, max_peso * total_rebate],
+        mode='lines',
+        line=dict(color='#ffc845', width=3, dash='dash'),
+        name='Avg Rebate'
+    ))
+    fig_rebate.update_xaxes(tickformat='.2%', title='Fund Weight (%)')
+    fig_rebate.update_yaxes(tickformat=',.0f', title='Total Rebate (EUR)')
+    fig_rebate.update_layout(
+        title='Rebates',
+        height=210 * 5, width=297 * 5, template='presentation',
+        font_family="Deutsche Bank Text",
+        margin = dict(l=100, r=80, t=150, b=80), plot_bgcolor = None
+    )
+    return fig_rebate
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.express as px
+from plotly.subplots import make_subplots
+
+def get_fig_treemap(df_funds, df, color_map_mod):
+    """
+    Create a treemap figure showing breakdown by AC and Module.
+    Args:
+        df_funds (pd.DataFrame): DataFrame with fund data.
+        df (pd.DataFrame): DataFrame for overall portfolio (for AC weights).
+        color_map_mod (dict): Color map for modules.
+    Returns:
+        plotly.graph_objs._figure.Figure: The treemap figure.
+    """
+    # First Treemap: Breakdown by AC
+    df_ac = df_funds.groupby(['AC', 'Descrizione'])['Controvalore EUR'].sum().reset_index()
+    df_ac['Peso'] = df['Controvalore EUR'] / df['Controvalore EUR'].sum()
+    fig_ac = px.treemap(
+        df_ac,
+        path=[px.Constant('Breakdown by AC'), 'AC', 'Descrizione'],
+        values='Controvalore EUR',
+        custom_data=['Controvalore EUR', 'Peso'],
+        title=None
+    ).update_traces(
+        texttemplate='%{label}<br>%{customdata[0]:,.0f} EUR<br>%{customdata[1]:.1%}',
+        hovertemplate='<b>%{label}</b><br>Ctv EUR: %{customdata[0]:,.0f}<br>Peso: %{customdata[1]:.1%}<extra></extra>'
+    )
+
+    # Second Treemap: Breakdown by Module
+    df_module = df_funds.groupby(['Module', 'Descrizione'])['Controvalore EUR'].sum().reset_index()
+    df_module['Peso'] = df_module['Controvalore EUR'] / df_module['Controvalore EUR'].sum()
+    fig_module = px.treemap(
+        df_module,
+        path=[px.Constant('Breakdown by Module'), 'Module', 'Descrizione'],
+        values='Controvalore EUR',
+        custom_data=['Controvalore EUR', 'Peso'],
+        title=None,
+        color='Module',
+        color_discrete_map={'(?)': '#FFFFFF', **color_map_mod}
+    ).update_traces(
+        hovertemplate='<b>%{label}</b><br>Ctv EUR: %{customdata[0]:,.0f}<br>Peso: %{customdata[1]:.1%}',
+        texttemplate='%{label}<br>%{customdata[0]:,.0f} EUR<br>%{customdata[1]:.1%}',
+    )
+
+    # Create a figure with subplots with proper specs for treemaps
+    fig_treemap = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=[None, None],
+        specs=[[{"type": "domain"}], [{"type": "domain"}]],
+        vertical_spacing=0.05
+    )
+
+    # Add both treemaps to the subplots
+    for trace in fig_ac.data:
+        fig_treemap.add_trace(trace, row=1, col=1)
+
+    for trace in fig_module.data:
+        fig_treemap.add_trace(trace, row=2, col=1)
+
+    # Update the layout for the combined figure
+    fig_treemap.update_layout(
+        title_text='Portfolio Breakdown Analysis',
+        height=210 * 5, width=297 * 5, template='presentation',
+        showlegend=False, font_family='Deutsche Bank Text',
+        margin=dict(l=30, r=30, t=150, b=50), plot_bgcolor=None
+    )
+
+    return fig_treemap
+
 
 def get_fig(i, RIC, df_funds, cumret_xs, cumret, logret, rolvol, sorted_rics, rolret, rolret_sma_spl, cols):
     fund_name = df_funds.loc[RIC, 'Descrizione']
