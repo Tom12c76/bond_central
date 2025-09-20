@@ -1,3 +1,10 @@
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
+from plotly.subplots import make_subplots
+
 def get_fig_returns(df_funds):
     fig_returns = px.bar(
         df_funds[['Descrizione', '12M Rtn', 'color']],
@@ -239,12 +246,6 @@ def get_fig_rebate(df_funds):
         margin = dict(l=100, r=80, t=150, b=80), plot_bgcolor = None
     )
     return fig_rebate
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.express as px
-from plotly.subplots import make_subplots
 
 def get_fig_treemap(df_funds, df, color_map_mod):
     """

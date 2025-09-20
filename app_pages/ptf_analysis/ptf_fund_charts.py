@@ -13,6 +13,9 @@ import plotly.figure_factory as ff
 import subprocess
 from PyPDF2 import PdfMerger
 
+
+from app_pages.ptf_analysis.utils.calculations import get_calc
+
 from app_pages.ptf_analysis.utils.charts import get_fig, get_fig_treemap, get_fig_trellis, get_fig_scatter, get_fig_contrib, get_fig_dendrogram, get_fig_rebate, get_fig_returns
 
 st.set_page_config(page_title="Ptf Fund Charts", page_icon="📈", layout='wide')
@@ -37,10 +40,6 @@ def get_fund_hist(rics, start, end):
     placeholder.empty()
     return fund_hist
 
-
-
-from app_pages.ptf_analysis.utils.calculations import get_calc
-from app_pages.ptf_analysis.utils.charts import get_fig, get_fig_treemap, get_fig_trellis, get_fig_scatter, get_fig_contrib, get_fig_dendrogram, get_fig_rebate
 
 ## Function moved to charts.py
 
@@ -293,7 +292,8 @@ correlation_matrix = logret.rename(columns=fund_names).drop('Portfolio', axis=1)
 import numpy as np
 correlation_matrix_clean = correlation_matrix.replace([np.inf, -np.inf], np.nan).fillna(0)
 
-sns.set(font_scale=1)
+sns.set_theme(font_scale=1)
+
 clustermap_fig = sns.clustermap(
     correlation_matrix_clean*100,
     method='average',
@@ -312,7 +312,6 @@ clustermap_fig.savefig("clustermap.png")
 st.image("clustermap.png", caption="Clustered Correlation Matrix of Funds", use_container_width=True)
 
 # Clean logret before dendrogram: replace inf with nan, then fill nan with 0
-import numpy as np
 logret_clean = logret.replace([np.inf, -np.inf], np.nan).fillna(0)
 
 # Ensure only numeric columns
@@ -349,8 +348,8 @@ def generate_and_merge_pdfs(fig_treemap, fig_returns, fig_trellis, fig_scatter, 
         for fig, filename in zip(figures, filenames):
             filepath = os.path.join(output_dir, f"{filename}")
             st.write("Working on: " + filepath)
-            fig.write_image(filepath + ".pdf") #Only save as PDF.
-            fig.write_image(filepath + ".png")  # Only save as PDF.
+            fig.write_image(filepath + ".pdf") # Only save as PDF.
+            # fig.write_image(filepath + ".png") # Only save as PNG.
             merger.append(filepath + ".pdf")
 
         for i, RIC in enumerate(sorted_rics):
@@ -366,6 +365,7 @@ def generate_and_merge_pdfs(fig_treemap, fig_returns, fig_trellis, fig_scatter, 
         merger.close()
         #Safely open PDF
         subprocess.Popen([output_filename], shell=True)
+
     except Exception as e:
         st.error(f"An error occurred: {e}")
 
