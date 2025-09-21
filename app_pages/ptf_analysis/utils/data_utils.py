@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import eikon as ek
 
-# @st.cache_data
+@st.cache_data
 def load_feather_data(df_filtered):
     asset_class = 'Funds'
     df = df_filtered.copy()
@@ -12,7 +12,7 @@ def load_feather_data(df_filtered):
     df = df.sort_values(by='Controvalore EUR', ascending=False)
     return df
 
-# @st.cache_data
+@st.cache_data
 def load_excel_data(uploaded_file, df_full):
     df = pd.read_excel(uploaded_file)
     df = df.drop('Descrizione', axis=1)
@@ -22,7 +22,7 @@ def load_excel_data(uploaded_file, df_full):
     df = df.merge(fund_info, on='ISIN')
     return df
 
-# @st.cache_data
+@st.cache_data
 def get_fund_hist_cached(rics, start, end):
     fund_hist, err = ek.get_data(rics,
                                  ['TR.FundNav.Date', 'TR.FundNav'],

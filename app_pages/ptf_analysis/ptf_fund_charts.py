@@ -4,15 +4,35 @@ import eikon as ek
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import warnings
 from PyPDF2 import PdfMerger
+import subprocess
+
 from app_pages.ptf_analysis.utils.calculations import get_calc
 from app_pages.ptf_analysis.utils.charts import get_fig, get_fig_treemap, get_fig_trellis, get_fig_scatter, get_fig_contrib, get_fig_dendrogram, get_fig_rebate, get_fig_returns
 from app_pages.ptf_analysis.utils.data_utils import load_feather_data, load_excel_data, get_fund_hist_cached
 
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 st.set_page_config(page_title="Ptf Fund Charts", page_icon="📈", layout='wide')
 
 ek.set_app_key('cf2eaf5e3b3c42adba08b3c5c2002b6ced1e77d7')
+
 cols = px.colors.qualitative.G10 * 10
+
+# Color maps for modules and general use
+color_map_mod = {'GIG':'#e57200',
+                'Thematic':'#016388',
+                'Chiuso':'#e4002b',
+                'Core Discretionary':'#1d2758',
+                'High Conviction':'#04a7e0',
+                'Complementary':'#293895',
+                'Strategic Liquidity':'#609bc7',
+                'not found':'#a8a8aa',
+                'None':'#d7dee2'}
+
+db_colors = ['#0c2340', '#4ac9e3', '#8794a1', '#ffc845', '#07792b', '#e4002b', '#00a3e0', '#671e75', '#cedc00',
+             '#e57200', '#57646c', '#99dcf3', '#a4bcc2', '#c9b7d1', '#f29e97', '#a7d6cd', '#d7dee2']
 
 
 # Initialize session state DataFrames if not already present
@@ -44,36 +64,29 @@ if df is None or df.empty:
 
 # Display the filtered DataFrame in an expandable container
 with st.expander('Filtered Portfolio Data', expanded=False):
-    df_fmt = df.copy()
-    # Format numbers as Markdown strings
-    df_fmt["Controvalore EUR"] = df_fmt["Controvalore EUR"].apply(lambda x: f"{x:,.0f}")
-    df_fmt["Quant"] = df_fmt["Quant"].apply(lambda x: f"{x:,.0f}")
-    df_fmt["Rebate"] = df_fmt["Rebate"].apply(lambda x: f"{x:.2%}")
-    st.table(df_fmt)
+    df_styled = df.style.format({
+        "Controvalore EUR": "{:,.0f}".format,
+        "Rebate": "{:.2%}".format,
+        "Quant": "{:,.2f}".format
+    })
+    st.dataframe(df_styled)
 
 
 # --- Control Panel: Asset Class, Module, and Fund Count ---
-with st.form("funds_control_panel"):
-    col1, col2 = st.columns([2,3])
+col1, col2 = st.columns([2,3])
 
-    unique_ac = ['All'] + df['AC'].unique().tolist()
-    selected_ac = col1.multiselect('Select Asset Class(es)', unique_ac, default='All', key='selected_ac')
+unique_ac = ['All'] + df['AC'].unique().tolist()
+selected_ac = col1.multiselect('Select Asset Class(es)', unique_ac, default='All', key='selected_ac')
 
-    unique_mod = ['All'] + df['Module'].unique().tolist()
-    selected_mod = col2.multiselect('Select Module(s)', unique_mod, default='All', key='selected_mod')
+unique_mod = ['All'] + df['Module'].unique().tolist()
+selected_mod = col2.multiselect('Select Module(s)', unique_mod, default='All', key='selected_mod')
 
-    # Generate slider steps including the final length
-    steps = list(range(0, len(df), 10))
-    if len(df) not in steps:
-        steps.append(len(df))
+# Generate slider steps including the final length
+steps = list(range(0, len(df), 10))
+if len(df) not in steps:
+    steps.append(len(df))
 
-    num_funds = st.select_slider('Select number of funds for analysis:', options=steps, value=min(10, len(df)))
-
-    submitted = st.form_submit_button("Submit")
-
-# Only continue if the form is submitted
-if not submitted:
-    st.stop()
+num_funds = st.select_slider('Select number of funds for analysis:', options=steps, value=min(10, len(df)))
 
 # Apply filters after submit
 df = df if 'All' in selected_ac or not selected_ac else df.loc[df['AC'].isin(selected_ac)]
@@ -97,43 +110,34 @@ if missing_isins:
 
 df = df.merge(st.session_state.df_ric, left_on='ISIN', right_on='Instrument', how='left').drop(columns=['Instrument'])
 
-if df['RIC'].isna().sum() > 0:
-    ric_not_found = df.loc[df.RIC.isna(), 'ISIN'].tolist()
-    st.write('Instruments not found on Eikon that will be dropped:',
-             ", ".join(df.loc[df['ISIN'].isin(ric_not_found), 'Descrizione'].tolist()))
 
-# Get RecordType from Eikon using RICs and merge
-ric_list = df.RIC.dropna().tolist()
-missing_rics = [ric for ric in ric_list if ric not in st.session_state.df_rectype['Instrument'].tolist()]
-
-if missing_rics:
-    df_rectype_new, err = ek.get_data(missing_rics, fields=['RECORDTYPE'])
-    dfs_to_concat = [st.session_state.df_rectype, df_rectype_new]
-    dfs_to_concat = [df for df in dfs_to_concat if not df.empty]
-    if dfs_to_concat:
-        st.session_state.df_rectype = pd.concat(dfs_to_concat, ignore_index=True)
-
-df = df.merge(st.session_state.df_rectype, left_on='RIC', right_on='Instrument', how='left').drop(columns=['Instrument'])
+# --- Clean warning section for dropped funds ---
+ric_not_found = df.loc[df.RIC.isna(), 'ISIN'].tolist() if 'RIC' in df.columns else []
+not_found_descr = df.loc[df['ISIN'].isin(ric_not_found), 'Descrizione'].tolist() if ric_not_found else []
 
 rectype_funds = [96]
-if len(df[~df.RECORDTYPE.isin(rectype_funds)]) > 0:
-    st.write('Assets not mapped as a fund that will be dropped:')
-    st.write(df.loc[~df.RECORDTYPE.isin(rectype_funds), 'Descrizione'])
+not_fund_descr = df.loc[(df['RECORDTYPE'].notna()) & (~df['RECORDTYPE'].isin(rectype_funds)), 'Descrizione'].tolist() if 'RECORDTYPE' in df.columns else []
 
-df_funds = df[df.RECORDTYPE.isin(rectype_funds)].copy()
-df_funds = df_funds.drop('RECORDTYPE', axis=1)
-df_funds = df_funds.set_index('RIC', drop=True)
+# After df_hist is created, check for insufficient history
+df_funds = df[df.RECORDTYPE.isin(rectype_funds)].copy() if 'RECORDTYPE' in df.columns else df.copy()
+if 'RECORDTYPE' in df_funds.columns:
+    df_funds = df_funds.drop('RECORDTYPE', axis=1)
+df_funds = df_funds.set_index('RIC', drop=True) if 'RIC' in df_funds.columns else df_funds
 
 end = pd.to_datetime('today').normalize().tz_localize(None) - pd.tseries.offsets.BusinessDay(n=1)
 start1 = end - pd.DateOffset(years=1)
 start2 = end - pd.DateOffset(years=2) - pd.DateOffset(days=50)
 
-missing_rics = [ric for ric in df_funds.index if ric not in st.session_state.df_hist.columns]
-
+missing_rics = [ric for ric in df_funds.index if ric not in st.session_state.df_hist.columns] if not df_funds.empty and 'RIC' in df_funds.index.names else []
 if missing_rics:
     batch_size = 100
+    import pandas as pd
     for i in range(0, len(missing_rics), batch_size):
-        batch_rics = missing_rics[i:i + batch_size]
+        batch_rics_raw = missing_rics[i:i + batch_size]
+        # Filter: keep only valid, non-missing strings
+        batch_rics = [ric for ric in batch_rics_raw if isinstance(ric, str) and pd.notna(ric) and ric.strip() != ""]
+        if not batch_rics:
+            continue
         new_hist = get_fund_hist_cached(batch_rics, start2.to_pydatetime(), end.to_pydatetime())
         dfs_to_concat = [st.session_state.df_hist, new_hist]
         dfs_to_concat = [df for df in dfs_to_concat if not df.empty]
@@ -141,17 +145,33 @@ if missing_rics:
             st.session_state.df_hist = pd.concat(dfs_to_concat, axis=1)
         st.rerun()
 
-df_hist = st.session_state.df_hist[df_funds.index]
+if not df_funds.empty and not st.session_state.df_hist.empty:
+    valid_rics = [ric for ric in df_funds.index if isinstance(ric, str) and pd.notna(ric) and ric.strip() != ""]
+    df_hist = st.session_state.df_hist[valid_rics]
+else:
+    df_hist = pd.DataFrame()
 
-### Perform calculations from here ########################################
+with st.expander("Historical Fund NAV's", expanded=False):
+    if df_hist.empty:
+        st.write("No historical data available.")
+    else:
+        st.dataframe(df_hist.style.format("{:,.2f}"))
+
 win = 252
 sma = 21
+hist_too_short_rics = (df_hist.loc[:, df_hist.count() < win + 2 * sma]).columns.tolist() if not df_hist.empty else []
+too_short_descr = df_funds.loc[hist_too_short_rics, 'Descrizione'].tolist() if hist_too_short_rics else []
 
-hist_too_short_rics = (df_hist.loc[:, df_hist.count() < win + 2 * sma]).columns.tolist()
-if len(hist_too_short_rics) > 0:
-    st.write("Funds with insufficient history that will be dropped:")
-    st.write(df_funds.loc[hist_too_short_rics, 'Descrizione'].to_list())
-    df_hist = df_hist.drop(hist_too_short_rics, axis=1)
+# Show a single clean warning if any funds will be dropped
+dropped_msgs = []
+if not_found_descr:
+    dropped_msgs.append("**Not found on Eikon:** " + ", ".join(not_found_descr))
+if not_fund_descr:
+    dropped_msgs.append("**Not mapped as fund:** " + ", ".join(not_fund_descr))
+if too_short_descr:
+    dropped_msgs.append("**Insufficient history:** " + ", ".join(too_short_descr))
+if dropped_msgs:
+    st.markdown("*The following funds will be dropped from the quant analysis:*<br>" + "<br>".join(dropped_msgs), unsafe_allow_html=True)
 
 ptf_val, logret, cumret, cumret_xs, rolret, rolret_sma, rolvol, rolrar, rolrar_sma, rolret_sma_spl, rolrar_sma_spl, rolrar_sma_acc, rarcdf = get_calc(df_hist, df_funds, start1, win, sma)
 
@@ -183,28 +203,35 @@ sorted_rics = cumret.iloc[-1].sort_values(ascending=False).index.tolist()
 cumret = cumret[sorted_rics]
 df_funds = df_funds.reindex(sorted_rics)
 
-st.write(df_funds)
+
+with st.expander('Portfolio Calculations', expanded=False):
+    # Format df_funds using Pandas Styler for Streamlit
+    df_funds_styled = df_funds.style.format({
+        "Controvalore EUR": "{:,.0f}",
+        "Initial": "{:,.0f}",
+        "Final": "{:,.0f}",
+        "PNL": "{:,.0f}",
+        "Rebate 12M EUR": "{:,.0f}",
+        "Quant": "{:,.2f}",
+        "Peso": "{:.2%}",
+        "Rebate": "{:.2%}",
+        "12M Rtn": "{:.2%}",
+        "12M Contrib": "{:.2%}",
+        "12M XS Rtn": "{:.2%}",
+        "12M Attrib": "{:.2%}",
+        "Last Yr Rtn": "{:.2%}",
+        "YTD Rtn": "{:.2%}"
+    })
+    st.dataframe(df_funds_styled)
 # df_funds.to_excel('df_funds.xlsx')
 
-color_map_mod = {'GIG':'#e57200',
-                'Thematic':'#016388',
-                'Chiuso':'#e4002b',
-                'Core Discretionary':'#1d2758',
-                'High Conviction':'#04a7e0',
-                'Complementary':'#293895',
-                'Strategic Liquidity':'#609bc7',
-                'not found':'#a8a8aa',
-                'None':'#d7dee2'}
-
-db_colors = ['#0c2340', '#4ac9e3', '#8794a1', '#ffc845', '#07792b', '#e4002b', '#00a3e0', '#671e75', '#cedc00',
-             '#e57200', '#57646c', '#99dcf3', '#a4bcc2', '#c9b7d1', '#f29e97', '#a7d6cd', '#d7dee2']
 
 fund_names = df_funds['Descrizione'].to_dict()
 fund_names['Ptf'] = 'Portfolio'
 
 sorted_rics = cumret.iloc[-1].sort_values(ascending=False).drop('Ptf').index.tolist()
 
-st.write(df_funds.loc[sorted_rics, 'Descrizione'])
+# st.write(df_funds.loc[sorted_rics, 'Descrizione'])
 
 st.plotly_chart(get_fig(1, sorted_rics[0], df_funds, cumret_xs, cumret, logret, rolvol, sorted_rics, rolret, rolret_sma_spl, cols))
 
