@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import scipy.interpolate as inter
 import scipy.stats as stats
-
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -13,62 +12,14 @@ import plotly.figure_factory as ff
 import subprocess
 from PyPDF2 import PdfMerger
 
-
 from app_pages.ptf_analysis.utils.calculations import get_calc
-
 from app_pages.ptf_analysis.utils.charts import get_fig, get_fig_treemap, get_fig_trellis, get_fig_scatter, get_fig_contrib, get_fig_dendrogram, get_fig_rebate, get_fig_returns
+from app_pages.ptf_analysis.utils.data_utils import load_feather_data, load_excel_data, get_fund_hist_cached
 
 st.set_page_config(page_title="Ptf Fund Charts", page_icon="📈", layout='wide')
 
 ek.set_app_key('cf2eaf5e3b3c42adba08b3c5c2002b6ced1e77d7')
 cols = px.colors.qualitative.G10 * 10
-
-# Fetch or use cached historical data
-def get_fund_hist(rics, start, end):
-    placeholder = st.empty()
-    placeholder.info(f"Fetching data ***for {len(rics)} RIC's*** from Eikon...")
-    fund_hist, err = ek.get_data(rics,
-                                 ['TR.FundNav.Date', 'TR.FundNav'],
-                                 {'SDate': start.strftime('%Y-%m-%d'),
-                                  'EDate': end.strftime('%Y-%m-%d'),
-                                  'Curn': 'EUR'})
-    fund_hist['Date'] = pd.to_datetime(fund_hist['Date']).dt.tz_localize(None)
-    fund_hist = fund_hist.pivot(index='Date', columns=['Instrument'])
-    fund_hist = fund_hist.droplevel(0, axis=1)
-    fund_hist = fund_hist.sort_index(ascending=True)
-    fund_hist = fund_hist.astype(float)
-    placeholder.empty()
-    return fund_hist
-
-
-## Function moved to charts.py
-
-def load_feather():
-    # Your existing asset class filtering logic
-    asset_class = 'Funds'
-    df = st.session_state.df_filtered.copy()
-    df = df.loc[df['L1'] == asset_class]
-
-    # Group by ISIN and Descrizione and sum Controvalore EUR and Peso
-    df = df.groupby(['AC', 'Module', 'ISIN', 'Descrizione'], as_index=False) \
-        .agg({'Controvalore EUR':'sum', 'Rebate':'median', 'Quant':'sum'})
-
-    # Sort the DataFrame in descending order of Controvalore EUR
-    df = df.sort_values(by='Controvalore EUR', ascending=False)
-    return df
-
-
-def load_excel():
-    uploaded_file = st.sidebar.file_uploader("ISIN, (Descrizione), Ctv EUR", type="xlsx")
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-        df = df.drop('Descrizione', axis=1)
-        # df['Peso'] = df['Controvalore EUR'] / df['Controvalore EUR'].sum()
-        fund_info = st.session_state.df_full.copy()
-        fund_info = fund_info.loc[
-        fund_info['L1'] == 'Funds', ['AC', 'Module', 'ISIN', 'Descrizione', 'Rebate']].drop_duplicates()
-        df = df.merge(fund_info, on='ISIN')
-        return df
 
 
 # Initialize session state DataFrames if not already present
@@ -83,16 +34,40 @@ if 'df_hist' not in st.session_state:
 # Radio button to select data source
 data_source = st.sidebar.radio("Choose data source", ("Use Feather DB", "Load Excel file"))
 
+
 # Load data based on the selected source
 if data_source == "Use Feather DB":
-    df = load_feather()
+    df = load_feather_data(st.session_state.df_filtered)
 else:
-    df = load_excel()
+    uploaded_file = st.sidebar.file_uploader("ISIN, (Descrizione), Ctv EUR", type="xlsx")
+    if uploaded_file:
+        df = load_excel_data(uploaded_file, st.session_state.df_full)
+    else:
+        df = None
 
 if df is None or df.empty:
     st.warning('Please load valid file')
+    st.stop()
 
-# else:
+# Display the filtered DataFrame in an expandable container
+with st.expander('Filtered Portfolio Data', expanded=False):
+    st.dataframe(
+        df,
+        column_config={
+            "Controvalore EUR": st.column_config.NumberColumn(
+                format="%.0f",
+            ),
+            "Rebate": st.column_config.NumberColumn(
+                format="%.4f",
+            ),
+            "Quant": st.column_config.NumberColumn(
+                format="%.0f"
+            ),
+        },
+        hide_index=True,
+        width='stretch'
+    )
+
 col1, col2 = st.columns([2,3])
 
 unique_ac = ['All'] + df['AC'].unique().tolist()
@@ -103,23 +78,6 @@ unique_mod = ['All'] + df['Module'].unique().tolist()
 selected_mod = col2.multiselect('Select Module(s)', unique_mod, default='All', key='selected_mod')
 df = df if 'All' in selected_mod or not selected_mod else df.loc[df['Module'].isin(selected_mod)]
 
-# Display the filtered DataFrame
-st.dataframe(
-    df,
-    column_config={
-        "Controvalore EUR": st.column_config.NumberColumn(
-            format="%.0f",
-        ),
-        "Rebate": st.column_config.NumberColumn(
-            format="%.4f",
-        ),
-        "Quant": st.column_config.NumberColumn(
-            format="%.0f"
-        ),
-    },
-    hide_index=True,
-    use_container_width=True
-)
 
 # Generate slider steps including the final length
 steps = list(range(0, len(df), 10))
@@ -140,7 +98,10 @@ missing_isins = [isin for isin in isin_list if isin not in st.session_state.df_r
 if missing_isins:
     df_ric_new, err = ek.get_data(missing_isins, fields=['TR.RIC'])
     df_ric_new['RIC'] = df_ric_new['RIC'].replace('', np.nan)
-    st.session_state.df_ric = pd.concat([st.session_state.df_ric, df_ric_new], ignore_index=True)
+    dfs_to_concat = [st.session_state.df_ric, df_ric_new]
+    dfs_to_concat = [df for df in dfs_to_concat if not df.empty]
+    if dfs_to_concat:
+        st.session_state.df_ric = pd.concat(dfs_to_concat, ignore_index=True)
 
 df = df.merge(st.session_state.df_ric, left_on='ISIN', right_on='Instrument', how='left').drop(columns=['Instrument'])
 
@@ -155,7 +116,10 @@ missing_rics = [ric for ric in ric_list if ric not in st.session_state.df_rectyp
 
 if missing_rics:
     df_rectype_new, err = ek.get_data(missing_rics, fields=['RECORDTYPE'])
-    st.session_state.df_rectype = pd.concat([st.session_state.df_rectype, df_rectype_new], ignore_index=True)
+    dfs_to_concat = [st.session_state.df_rectype, df_rectype_new]
+    dfs_to_concat = [df for df in dfs_to_concat if not df.empty]
+    if dfs_to_concat:
+        st.session_state.df_rectype = pd.concat(dfs_to_concat, ignore_index=True)
 
 df = df.merge(st.session_state.df_rectype, left_on='RIC', right_on='Instrument', how='left').drop(columns=['Instrument'])
 
@@ -178,8 +142,11 @@ if missing_rics:
     batch_size = 100
     for i in range(0, len(missing_rics), batch_size):
         batch_rics = missing_rics[i:i + batch_size]
-        new_hist = get_fund_hist(rics=batch_rics, start=start2.to_pydatetime(), end=end.to_pydatetime())
-        st.session_state.df_hist = pd.concat([st.session_state.df_hist, new_hist], axis=1)
+        new_hist = get_fund_hist_cached(batch_rics, start2.to_pydatetime(), end.to_pydatetime())
+        dfs_to_concat = [st.session_state.df_hist, new_hist]
+        dfs_to_concat = [df for df in dfs_to_concat if not df.empty]
+        if dfs_to_concat:
+            st.session_state.df_hist = pd.concat(dfs_to_concat, axis=1)
         st.rerun()
 
 df_hist = st.session_state.df_hist[df_funds.index]
@@ -213,8 +180,6 @@ df_funds['12M Attrib'] = df_funds['Peso'] * df_funds['12M XS Rtn']
 df_funds.loc[:, 'leader laggard'] = np.where(df_funds['12M XS Rtn'] > 0, 'leader', 'laggard')
 df_funds.loc['Ptf', 'leader laggard'] = np.nan
 
-# lastday_lastyear = rolret.loc[rolret.index.year == rolret.index[-1].year - 1].index.max()
-
 df_funds.loc[:, 'Last Yr Rtn'] = np.exp(logret.loc[logret.index.year == logret.index.year.max()-1].sum())-1
 df_funds.loc[:, 'YTD Rtn'] = np.exp(logret.loc[logret.index.year == logret.index.year.max()].sum())-1
 
@@ -227,7 +192,7 @@ cumret = cumret[sorted_rics]
 df_funds = df_funds.reindex(sorted_rics)
 
 st.write(df_funds)
-df_funds.to_excel('df_funds.xlsx')
+# df_funds.to_excel('df_funds.xlsx')
 
 color_map_mod = {'GIG':'#e57200',
                 'Thematic':'#016388',
@@ -287,9 +252,7 @@ import seaborn as sns
 correlation_matrix = logret.rename(columns=fund_names).drop('Portfolio', axis=1).corr()
 
 # Create a clustermap from the correlation matrix
-
 # Clean correlation matrix: replace inf with nan, then fill nan with 0
-import numpy as np
 correlation_matrix_clean = correlation_matrix.replace([np.inf, -np.inf], np.nan).fillna(0)
 
 sns.set_theme(font_scale=1)
@@ -309,7 +272,7 @@ clustermap_fig = sns.clustermap(
 clustermap_fig.savefig("clustermap.png")
 
 # Display the saved image in Streamlit
-st.image("clustermap.png", caption="Clustered Correlation Matrix of Funds", use_container_width=True)
+st.image("clustermap.png", caption="Clustered Correlation Matrix of Funds", width='stretch')
 
 # Clean logret before dendrogram: replace inf with nan, then fill nan with 0
 logret_clean = logret.replace([np.inf, -np.inf], np.nan).fillna(0)
