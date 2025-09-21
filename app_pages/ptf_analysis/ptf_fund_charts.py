@@ -3,15 +3,8 @@ import streamlit as st
 import eikon as ek
 import numpy as np
 import pandas as pd
-import scipy.interpolate as inter
-import scipy.stats as stats
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.figure_factory as ff
-import subprocess
 from PyPDF2 import PdfMerger
-
 from app_pages.ptf_analysis.utils.calculations import get_calc
 from app_pages.ptf_analysis.utils.charts import get_fig, get_fig_treemap, get_fig_trellis, get_fig_scatter, get_fig_contrib, get_fig_dendrogram, get_fig_rebate, get_fig_returns
 from app_pages.ptf_analysis.utils.data_utils import load_feather_data, load_excel_data, get_fund_hist_cached
@@ -51,41 +44,40 @@ if df is None or df.empty:
 
 # Display the filtered DataFrame in an expandable container
 with st.expander('Filtered Portfolio Data', expanded=False):
-    st.dataframe(
-        df,
-        column_config={
-            "Controvalore EUR": st.column_config.NumberColumn(
-                format="%.0f",
-            ),
-            "Rebate": st.column_config.NumberColumn(
-                format="%.4f",
-            ),
-            "Quant": st.column_config.NumberColumn(
-                format="%.0f"
-            ),
-        },
-        hide_index=True,
-        width='stretch'
-    )
+    df_fmt = df.copy()
+    # Format numbers as Markdown strings
+    df_fmt["Controvalore EUR"] = df_fmt["Controvalore EUR"].apply(lambda x: f"{x:,.0f}")
+    df_fmt["Quant"] = df_fmt["Quant"].apply(lambda x: f"{x:,.0f}")
+    df_fmt["Rebate"] = df_fmt["Rebate"].apply(lambda x: f"{x:.2%}")
+    st.table(df_fmt)
 
-col1, col2 = st.columns([2,3])
 
-unique_ac = ['All'] + df['AC'].unique().tolist()
-selected_ac = col1.multiselect('Select Asset Class(es)', unique_ac, default='All', key='selected_ac')
+# --- Control Panel: Asset Class, Module, and Fund Count ---
+with st.form("funds_control_panel"):
+    col1, col2 = st.columns([2,3])
+
+    unique_ac = ['All'] + df['AC'].unique().tolist()
+    selected_ac = col1.multiselect('Select Asset Class(es)', unique_ac, default='All', key='selected_ac')
+
+    unique_mod = ['All'] + df['Module'].unique().tolist()
+    selected_mod = col2.multiselect('Select Module(s)', unique_mod, default='All', key='selected_mod')
+
+    # Generate slider steps including the final length
+    steps = list(range(0, len(df), 10))
+    if len(df) not in steps:
+        steps.append(len(df))
+
+    num_funds = st.select_slider('Select number of funds for analysis:', options=steps, value=min(10, len(df)))
+
+    submitted = st.form_submit_button("Submit")
+
+# Only continue if the form is submitted
+if not submitted:
+    st.stop()
+
+# Apply filters after submit
 df = df if 'All' in selected_ac or not selected_ac else df.loc[df['AC'].isin(selected_ac)]
-
-unique_mod = ['All'] + df['Module'].unique().tolist()
-selected_mod = col2.multiselect('Select Module(s)', unique_mod, default='All', key='selected_mod')
 df = df if 'All' in selected_mod or not selected_mod else df.loc[df['Module'].isin(selected_mod)]
-
-
-# Generate slider steps including the final length
-steps = list(range(0, len(df), 10))
-if len(df) not in steps:
-    steps.append(len(df))
-
-# Limit the number of funds based on slider selection
-num_funds = st.select_slider('Select number of funds for analysis:', options=steps, value=min(10, len(df)))
 df = df.head(num_funds)
 
 # Count of all ISINs in the selected portfolio
@@ -158,7 +150,7 @@ sma = 21
 hist_too_short_rics = (df_hist.loc[:, df_hist.count() < win + 2 * sma]).columns.tolist()
 if len(hist_too_short_rics) > 0:
     st.write("Funds with insufficient history that will be dropped:")
-    st.write(df_funds.loc[hist_too_short_rics, 'Descrizione'])
+    st.write(df_funds.loc[hist_too_short_rics, 'Descrizione'].to_list())
     df_hist = df_hist.drop(hist_too_short_rics, axis=1)
 
 ptf_val, logret, cumret, cumret_xs, rolret, rolret_sma, rolvol, rolrar, rolrar_sma, rolret_sma_spl, rolrar_sma_spl, rolrar_sma_acc, rarcdf = get_calc(df_hist, df_funds, start1, win, sma)
